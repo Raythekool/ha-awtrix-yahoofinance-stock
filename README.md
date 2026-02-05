@@ -9,6 +9,8 @@
 
 Home Assistant Blueprint to display Yahoo Finance stock data on your AWTRIX 3 LED matrix device with dynamic colors and icons.
 
+![AWTRIX Stock Display Demo](assets/demo.jpg)
+
 ## ⚠️ Requirements
 
 Before using this blueprint, make sure you have:
@@ -191,10 +193,6 @@ This project is distributed under the MIT License. See the `LICENSE` file for mo
 - Yahoo Finance Integration: [Home Assistant](https://www.home-assistant.io/integrations/yahoofinance/)
 - AWTRIX 3: [Blueforcer](https://github.com/Blueforcer/awtrix3)
 - Icons: [LaMetric](https://developer.lametric.com/icons)
-
-## 📸 Screenshots
-
-*Coming soon - add your screenshots by opening a PR!*
 
 ## ⭐ Show Your Support
 
