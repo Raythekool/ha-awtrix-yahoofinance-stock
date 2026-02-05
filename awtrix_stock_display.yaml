@@ -1,0 +1,207 @@
+blueprint:
+  name: "AWTRIX Stock Display 📈"
+  description:
+    "Display Yahoo Finance stock data on your AWTRIX LED matrix device with dynamic colors and icons.\n\n
+    Automatically monitors Yahoo Finance sensors and displays stock price with percentage change,
+    using color-coded indicators and icons based on market performance.\n\n
+    ## ⚠️ REQUIREMENTS\n
+    - **Home Assistant** 2024.6.0 or newer\n
+    - **AWTRIX 3** device configured with MQTT\n
+    - **[Yahoo Finance Integration](https://www.home-assistant.io/integrations/yahoofinance/)** installed and configured\n\n
+    ## 🎯 KEY FEATURES\n
+    - **Dynamic colors**: Green for gains, red for losses, white for minimal changes\n
+    - **Smart icons**: Different icons based on price movement (up/down/neutral)\n
+    - **Percentage display**: Shows current price and percentage change\n
+    - **Configurable thresholds**: Set your own thresholds for color changes\n
+    - **Multi-device support**: Send to multiple AWTRIX devices simultaneously\n
+    - **Customizable display**: Control scroll speed, lifetime, and repeat count\n\n
+    ## 📊 DISPLAY FORMAT\n
+    Example: **AAPL 150.25€ (+2.34%)**\n
+    - Stock symbol (customizable short name)\n
+    - Current price with currency\n
+    - Percentage change with + or - sign\n\n
+    ## 🎨 COLOR & ICON LOGIC\n
+    - **Green** 📈 (icon 40160): Change > +0.2%\n
+    - **Red** 📉 (icon 40176): Change < -0.2%\n
+    - **White** ➡️ (icon 40161): Change between -0.2% and +0.2%\n\n
+    ## ⚙️ CONFIGURATION OPTIONS\n
+    - **Stock Sensor**: Yahoo Finance sensor entity\n
+    - **Stock Name**: Short display name (e.g., AAPL, TSLA)\n
+    - **App Name**: Unique AWTRIX app identifier\n
+    - **Change Threshold**: Percentage threshold for color changes (default: 0.2%)\n
+    - **Lifetime**: How long the app stays visible (seconds, default: 900)\n
+    - **Repeat**: Number of times to display (default: 1)\n
+    - **Scroll Speed**: Text scrolling speed (default: 100)\n\n
+    ## 🔗 MORE INFO\n
+    Documentation: https://github.com/Raythekool/ha-awtrix-yahoofinance-stock\n
+    Yahoo Finance Integration: https://www.home-assistant.io/integrations/yahoofinance/"
+  domain: automation
+  homeassistant:
+    min_version: "2024.6.0"
+  source_url: https://github.com/Raythekool/ha-awtrix-yahoofinance-stock/blob/main/awtrix_stock_display.yaml
+  input:
+    awtrix:
+      name: AWTRIX Device
+      description: Select your AWTRIX device(s)
+      selector:
+        device:
+          integration: mqtt
+          manufacturer: Blueforcer
+          model: AWTRIX 3
+          multiple: true
+
+    stock_sensor:
+      name: Yahoo Finance Sensor
+      description: Select the Yahoo Finance stock sensor to monitor
+      selector:
+        entity:
+          filter:
+            - integration: yahoofinance
+              domain: sensor
+
+    stock_name:
+      name: Stock Display Name
+      description: Short name to display (e.g., AAPL, TSLA, MSFT)
+      selector:
+        text: {}
+      default: "STOCK"
+
+    app_name:
+      name: AWTRIX App Name
+      description: Unique identifier for this stock app (e.g., stock_aapl)
+      selector:
+        text: {}
+      default: "stock"
+
+    change_threshold:
+      name: Change Threshold (%)
+      description: Percentage change threshold for color changes (default: 0.2%)
+      selector:
+        number:
+          min: 0.01
+          max: 5.0
+          step: 0.01
+          mode: box
+      default: 0.2
+
+    lifetime:
+      name: Lifetime (seconds)
+      description: How long the app should stay visible (0 = permanent until cleared)
+      selector:
+        number:
+          min: 0
+          max: 3600
+          step: 1
+          mode: slider
+      default: 900
+
+    repeat:
+      name: Repeat Count
+      description: Number of times to display the stock info
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: slider
+      default: 1
+
+    scroll_speed:
+      name: Scroll Speed
+      description: Text scrolling speed (lower = faster)
+      selector:
+        number:
+          min: 10
+          max: 200
+          step: 10
+          mode: slider
+      default: 100
+
+mode: restart
+
+variables:
+  device_ids: !input awtrix
+  stock_sensor: !input stock_sensor
+  stock_name: !input stock_name
+  app_name: !input app_name
+  change_threshold: !input change_threshold
+  lifetime: !input lifetime
+  repeat: !input repeat
+  scroll_speed: !input scroll_speed
+
+  # Get current price and change percentage
+  current_price: "{{ states(stock_sensor) }}"
+  change_percent: "{{ state_attr(stock_sensor, 'regularMarketChangePercent') | float(0) }}"
+
+  # Determine color based on change
+  stock_color: |
+    {% set change = state_attr(stock_sensor, 'regularMarketChangePercent') | float(0) %}
+    {% if change > change_threshold %}
+      [0, 255, 0]
+    {% elif change < (0 - change_threshold) %}
+      [255, 0, 0]
+    {% else %}
+      [255, 255, 255]
+    {% endif %}
+
+  # Determine icon based on change
+  stock_icon: |
+    {% set change = state_attr(stock_sensor, 'regularMarketChangePercent') | float(0) %}
+    {% if change > change_threshold %}
+      40160
+    {% elif change < (0 - change_threshold) %}
+      40176
+    {% else %}
+      40161
+    {% endif %}
+
+  # Build display text
+  display_text: |
+    {{ stock_name }} {{ current_price }}€  {% set change = state_attr(stock_sensor, 'regularMarketChangePercent') | float(0) %} ({{ change | round(2) }}%)
+
+trigger:
+  - platform: state
+    entity_id: !input stock_sensor
+    to:
+  - platform: state
+    entity_id: !input stock_sensor
+    attribute: regularMarketChangePercent
+
+condition: []
+
+action:
+  - repeat:
+      for_each: "{{ device_ids }}"
+      sequence:
+        - service: mqtt.publish
+          data:
+            qos: 0
+            retain: false
+            topic: >
+              {% set device_topic = states((device_entities(repeat.item) | select('search','device_topic') | list)[0]) %}
+              {{ device_topic }}/custom/{{ app_name }}
+            payload: |
+              {
+                "text": "{{ display_text }}",
+                "icon": "{{ stock_icon }}",
+                "color": {{ stock_color }},
+                "pushIcon": 0,
+                "lifetimeMode": 0,
+                "lifetime": {{ lifetime }},
+                "repeat": {{ repeat }},
+                "scrollSpeed": {{ scroll_speed }}
+              }
+
+  # Log trigger information
+  - service: system_log.write
+    data:
+      message: >
+        📊 AWTRIX Stock Display Triggered
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        🔹 Stock: {{ stock_name }}
+        🔹 Sensor: {{ stock_sensor }}
+        🔹 Old Price: {{ trigger.from_state.state if trigger.from_state else 'N/A' }}
+        🔹 New Price: {{ trigger.to_state.state if trigger.to_state else 'N/A' }}
+        🔹 Change: {{ change_percent | round(2) }}%
+        🔹 Timestamp: {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+      level: info
